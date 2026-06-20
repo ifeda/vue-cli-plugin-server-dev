@@ -1,6 +1,6 @@
 {
   "name": "vue-cli-plugin-server-dev",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Easily start Your development server program and proxy it by Vue App Dev Server",
   "main": "dist/index.js",
   "scripts": {
