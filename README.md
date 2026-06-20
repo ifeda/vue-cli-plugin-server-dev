@@ -26,6 +26,11 @@ Normally, it will be automatically configured during installation. Of course, yo
 - **Vue CLI projects**: Uses `vue.config.js`
 - **Vite projects**: Uses `vite.config.js`
 
+**Smart project type detection:**
+- The plugin automatically detects your project type (based on dependencies in `package.json`)
+- If both Vite and Vue CLI are installed, it prefers Vite (by checking if the `build` script contains `vite` command)
+- This allows smooth migration from Vue CLI to Vite without manually removing `@vue/cli-service`
+
 There are two options to pay attention: devServer and pluginOptions:serverDev
 
 

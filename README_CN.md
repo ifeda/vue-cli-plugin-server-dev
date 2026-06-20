@@ -26,6 +26,11 @@ vue add server-dev
 - **Vue CLI 项目**：使用 `vue.config.js`
 - **Vite 项目**：使用 `vite.config.js`
 
+**智能项目类型检测：**
+- 插件会自动检测你的项目类型（基于 `package.json` 中的依赖）
+- 如果同时安装了 Vite 和 Vue CLI，会优先使用 Vite（通过检查 `build` 脚本是否包含 `vite` 命令）
+- 这样可以平滑地从 Vue CLI 迁移到 Vite，无需手动删除 `@vue/cli-service`
+
 有两个需要注意的配置项：devServer 和 pluginOptions:serverDev
 
 

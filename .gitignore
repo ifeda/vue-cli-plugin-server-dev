@@ -5,6 +5,9 @@ coverage/
 # Dependencies
 node_modules/
 
+# NPM config (contains tokens)
+.npmrc
+
 # Build output
 dist/
 *.map

@@ -39,8 +39,11 @@ describe('Generator', () => {
     jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
     jest.spyOn(fs, 'mkdirSync').mockImplementation(() => {});
     
-    // Mock console.log to avoid JSON parsing errors in test output
+    // Mock console methods to avoid JSON parsing errors in test output
     jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'info').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -86,7 +89,7 @@ describe('Generator', () => {
 
     it('should call api.render when TypeScript is enabled', () => {
       generator(mockApi, mockOptions);
-      expect(mockApi.render).toHaveBeenCalledWith('./templates', expect.any(Object));
+      expect(mockApi.render).toHaveBeenCalledWith('./templates');
     });
 
     it('should add build:server script when TypeScript is enabled', () => {

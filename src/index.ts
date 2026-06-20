@@ -45,6 +45,29 @@ module.exports = (api: any, options: PluginOptions) => {
   const run: string = opts.run || 'npx ts-node-dev --transpile-only ./src/server/index.ts';
   const watchDir: string | string[] | undefined = opts.watchDir;
 
+  // Detect project type (with error handling for test environments)
+  let isViteProject = false;
+  try {
+    const fs = require('fs');
+    const pkgPath = api.resolve('./package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    
+    const hasVite = pkg.devDependencies?.vite || 
+                    pkg.dependencies?.vite || 
+                    (pkg.scripts && Object.values(pkg.scripts).some((cmd: unknown) => typeof cmd === 'string' && cmd.includes('vite')));
+    
+    const hasVueCLI = pkg.devDependencies?.['@vue/cli-service'] ||
+                      pkg.dependencies?.['@vue/cli-service'];
+    
+    // Priority: Vite > Vue CLI (if both exist, prefer Vite)
+    // Also check if build script uses vite
+    const buildScriptUsesVite = pkg.scripts?.build && typeof pkg.scripts.build === 'string' && pkg.scripts.build.includes('vite');
+    isViteProject = (hasVite && !hasVueCLI) || (hasVite && hasVueCLI && buildScriptUsesVite);
+  } catch (err) {
+    // In test environment or if package.json doesn't exist, default to Vue CLI
+    isViteProject = false;
+  }
+
   api.registerCommand(
     'dev:serve',
     {
@@ -160,56 +183,97 @@ module.exports = (api: any, options: PluginOptions) => {
         error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
       });
 
-      return api.service.run('serve', {
-        _: [],
-        dashboard: args.dashboard,
-        https: args.https
-      })
-        .then(start)
-        .then(() => {
-          if (watchDir) {
-            // watch file changes
-            const watcher = chokidar.watch(watchDir, {
-              ignored: /node_modules|\.git/,
-              persistent: true,
-              ignoreInitial: true,
-              awaitWriteFinish: {
-                stabilityThreshold: 300,
-                pollInterval: 100
-              },
-              depth: 99
-            });
+      // Start frontend dev server based on project type
+      let frontendServer: execa.ExecaChildProcess | null = null;
+      
+      if (isViteProject) {
+        // For Vite projects, start vite dev server directly
+        info('Starting Vite development server...');
+        const [viteCmd, ...viteArgs] = 'vite'.split(/\s+/);
+        
+        frontendServer = execa(viteCmd, viteArgs, {
+          stdio: 'inherit',
+          shell: true,
+          cleanup: true
+        }) as execa.ExecaChildProcess;
+        
+        frontendServer.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
+          if (!isShuttingDown) {
+            warn(`Vite process exited with code ${code} and signal ${signal}`);
+          }
+        });
+        
+        frontendServer.on('error', (err: Error) => {
+          error(`Failed to start Vite: ${err.message}`);
+        });
+        
+        // Wait for Vite to start, then start backend server
+        setTimeout(() => {
+          start().then(() => {
+            setupWatcher();
+          }).catch(error);
+        }, 2000);
+      } else {
+        // For Vue CLI projects, use the original approach
+        return api.service.run('serve', {
+          _: [],
+          dashboard: args.dashboard,
+          https: args.https
+        })
+          .then(start)
+          .then(() => {
+            setupWatcher();
+          }).catch(error);
+      }
+      
+      function setupWatcher() {
+        if (watchDir) {
+          // watch file changes
+          const watcher = chokidar.watch(watchDir, {
+            ignored: /node_modules|\.git/,
+            persistent: true,
+            ignoreInitial: true,
+            awaitWriteFinish: {
+              stabilityThreshold: 300,
+              pollInterval: 100
+            },
+            depth: 99
+          });
+          
+          watcher.on('ready', () => {
+            info(`Watching for changes in: ${watchDir}`);
+          });
+          
+          watcher.on('change', debounce((filePath: string) => {
+            if (isShuttingDown || (serve && (serve as any).stoping)) {
+              return;
+            }
             
-            watcher.on('ready', () => {
-              info(`Watching for changes in: ${watchDir}`);
-            });
+            info(`Detect ${filePath} changed, restarting development server...`);
             
-            watcher.on('change', debounce((filePath: string) => {
-              if (isShuttingDown || (serve && (serve as any).stoping)) {
-                return;
+            (async () => {
+              try {
+                await stop();
+                await start();
+                done('Success restarted development server!');
+              } catch (err: any) {
+                error(`Failed to restart server: ${err.message}`);
               }
-              
-              info(`Detect ${filePath} changed, restarting development server...`);
-              
-              (async () => {
-                try {
-                  await stop();
-                  await start();
-                  done('Success restarted development server!');
-                } catch (err: any) {
-                  error(`Failed to restart server: ${err.message}`);
-                }
-              })();
-            }, 500));
-            
-            watcher.on('error', (err: Error) => {
-              error(`Watcher error: ${err.message}`);
-            });
-            
-            // Store watcher reference for cleanup
+            })();
+          }, 500));
+          
+          watcher.on('error', (err: Error) => {
+            error(`Watcher error: ${err.message}`);
+          });
+          
+          // Store watcher reference for cleanup
+          if (isViteProject) {
+            (frontendServer as any).__serverDevWatcher = watcher;
+          } else {
             api.service.__serverDevWatcher = watcher;
           }
-        }).catch(error);
+        }
+      }
     }
   );
 };
