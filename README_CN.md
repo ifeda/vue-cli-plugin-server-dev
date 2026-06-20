@@ -2,7 +2,7 @@
 
 轻松启动你的开发服务器程序，并通过 Vue App Dev Server 进行代理！
 
-如果你是一名全栈工程师，比如使用 express/koa + vue 进行开发，你可能需要同时开发 express/koa 和 vue 代码。使用这个插件可以让你轻松地整合前后端代码在一起开发，此插件可以监听代码修改并自动重启开发服务器（你也可以给ts-node-dev添加--respawn参数用ts-node-dev的热重启功能，若如此你需要把watchDir设置为null）。
+如果你是一名全栈工程师，比如使用 express/koa + vue 进行开发，你可能需要同时开发 express/koa 和 vue 代码。使用这个插件可以让你轻松地整合前后端代码在一起开发，此插件可以监听代码修改并自动重启开发服务器。
 
 **v2.0.0 重大更新**: 现已完全迁移到 TypeScript，移除了 Babel 和 Rollup 依赖，提供更简洁的开发体验！
 
@@ -58,8 +58,8 @@ devServer: {
 ```javascript
 pluginOptions: {
   serverDev: {
-    run: 'npx ts-node-dev --transpile-only ./src/server/index.ts',  // TypeScript（默认）
-    // 或: 'node ./src/server/index.js',                            // JavaScript
+    run: 'npx tsx watch --tsconfig tsconfig.server.json ./src/server/index.ts',  // TypeScript（默认）
+    // 或: 'node ./src/server/index.js',                                          // JavaScript
     watchDir: './src/server/**'
   }
 }
@@ -68,15 +68,42 @@ pluginOptions: {
 "serverDev" 键名是供 vue-cli-plugin-server-dev 使用的。只有两个选项：
 
 - **run**: (字符串) 指定启动开发服务器的命令
-  - TypeScript 项目: `'npx ts-node-dev --transpile-only ./src/server/index.ts'`（推荐，默认）
-    - `ts-node-dev` 比 `ts-node` 提供更快的重启和更好的监听
-    - `--transpile-only` 跳过类型检查以获得更快的启动速度（如果需要类型检查则不使用此参数）
+  - TypeScript 项目: `'npx tsx watch --tsconfig tsconfig.server.json ./src/server/index.ts'`（推荐，默认）
+    - `tsx` 比 `ts-node-dev` 提供更快的执行速度和更好的 TypeScript 支持
+    - `--tsconfig tsconfig.server.json` 为服务器代码使用独立的 TypeScript 配置
+    - `watch` 启用自动文件监听和重启
   - JavaScript 项目: `'node ./src/server/index.js'`
   - 自定义设置: 任何可以启动你服务器的命令
 
 - **watchDir**: (字符串或字符串数组) 指定你的服务器开发代码所在目录的 glob 模式
   - 该目录中的更改将触发服务器自动重启
   - 示例: `'./src/server/**'` 或 `['./src/server/**', './src/shared/**']`
+  
+  ⚠️ **关于 watchDir 和 tsx watch 的重要提示：**
+  
+  如果你将 `watchDir` 设置为监听服务器代码目录（例如 `'./src/server/**'`），插件会：
+  1. 当文件变化时杀死整个 tsx 进程树
+  2. 等待约 5 秒进行优雅关闭
+  3. 启动新的 tsx 进程（冷重启）
+  
+  这会导致**冷重启**，在停止和启动之间会有明显的延迟。
+  
+  **推荐的热重启方案：**
+  
+  由于 `tsx watch` 内置了文件监听和热重启功能，你可以：
+  - 设置 `watchDir: null` 或 `watchDir: './non-server-dir/**'`（任何非服务器目录）
+  - 让 tsx 使用其 `watch` 参数内部处理文件监听
+  - 这样可以启用**热重启**，比冷重启快得多
+  
+  热重启配置示例：
+  ```javascript
+  pluginOptions: {
+    serverDev: {
+      run: 'npx tsx watch --tsconfig tsconfig.server.json ./src/server/index.ts',
+      watchDir: null  // 让 tsx 内部处理监听
+    }
+  }
+  ```
 
 
 
@@ -380,7 +407,7 @@ npm run lint         # 对 TypeScript 文件运行 ESLint
 ### v2.0.0 (2026年6月)
 - 🎉 **重大更新**: 迁移到 TypeScript
 - ✅ 移除 Babel 和 Rollup 依赖
-- ✅ 添加 ts-node-dev 支持
+- ✅ 添加 tsx watch 支持并使用独立 tsconfig
 - ✅ 简化配置
 - ✅ 更好的类型安全
 - ✅ 改进的开发体验

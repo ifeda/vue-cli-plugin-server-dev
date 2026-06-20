@@ -2,7 +2,7 @@
 
 Easily start Your development server program and proxy it by Vue App Dev Server!
 
-If you are a full stack engineer, such as using express/koa+vue development, you may need to develop both express/koa and vue code. Using this plugin will make it easy to integrate frontend and backend code for development. This plugin can watch code changes and automatically restart the development server (you can also add the --respawn parameter to ts-node-dev to use its hot-restart feature, in which case you should set watchDir to null).
+If you are a full stack engineer, such as using express/koa+vue development, you may need to develop both express/koa and vue code. Using this plugin will make it easy to integrate frontend and backend code for development. This plugin can watch code changes and automatically restart the development server.
 
 **v2.0.0 Major Update**: Now fully migrated to TypeScript, removed Babel and Rollup dependencies, providing a simpler development experience!
 
@@ -58,8 +58,8 @@ Generally, configuration will be automatically added:
 ```javascript
 pluginOptions: {
   serverDev: {
-    run: 'npx ts-node-dev --transpile-only ./src/server/index.ts',  // TypeScript (default)
-    // or: 'node ./src/server/index.js',                            // JavaScript
+    run: 'npx tsx watch --tsconfig tsconfig.server.json ./src/server/index.ts',  // TypeScript (default)
+    // or: 'node ./src/server/index.js',                                          // JavaScript
     watchDir: './src/server/**'
   }
 }
@@ -68,15 +68,42 @@ pluginOptions: {
 The key of "serverDev" is for vue-cli-plugin-server-dev. There are only two options:
 
 - **run**: (string) specify the command to start your development server
-  - For TypeScript: `'npx ts-node-dev --transpile-only ./src/server/index.ts'` (recommended, default)
-    - `ts-node-dev` provides faster restarts and better watching than `ts-node`
-    - `--transpile-only` skips type checking for faster startup (use without it if you want type checking)
+  - For TypeScript: `'npx tsx watch --tsconfig tsconfig.server.json ./src/server/index.ts'` (recommended, default)
+    - `tsx` provides faster execution and better TypeScript support than `ts-node-dev`
+    - `--tsconfig tsconfig.server.json` uses separate TypeScript config for server code
+    - `watch` enables automatic file watching and restart
   - For JavaScript: `'node ./src/server/index.js'`
   - For custom setup: Any command that starts your server
 
 - **watchDir**: (string or array of strings) specify the glob patterns with the directory where your server development code is.
   - Changes in this directory will trigger automatic server restart
   - Example: `'./src/server/**'` or `['./src/server/**', './src/shared/**']`
+  
+  ⚠️ **Important Note about watchDir and tsx watch:**
+  
+  If you set `watchDir` to monitor server code directory (e.g., `'./src/server/**'`), the plugin will:
+  1. Kill the entire tsx process tree when files change
+  2. Wait ~5 seconds for graceful shutdown
+  3. Start a new tsx process (cold restart)
+  
+  This results in a **cold restart** with noticeable delay between stop and start.
+  
+  **Recommended approach for faster hot restart:**
+  
+  Since `tsx watch` has built-in file watching and hot restart capabilities, you can:
+  - Set `watchDir: null` or `watchDir: './non-server-dir/**'` (any non-server directory)
+  - Let tsx handle file watching internally using its `watch` parameter
+  - This enables **hot restart** which is much faster than cold restart
+  
+  Example configuration for hot restart:
+  ```javascript
+  pluginOptions: {
+    serverDev: {
+      run: 'npx tsx watch --tsconfig tsconfig.server.json ./src/server/index.ts',
+      watchDir: null  // Let tsx handle watching internally
+    }
+  }
+  ```
 
 
 
@@ -380,7 +407,7 @@ For detailed documentation, please refer to:
 ### v2.0.0 (June 2026)
 - 🎉 **Major Update**: Migrated to TypeScript
 - ✅ Removed Babel and Rollup dependencies
-- ✅ Added ts-node-dev support
+- ✅ Added tsx watch support with separate tsconfig
 - ✅ Simplified configuration
 - ✅ Better type safety
 - ✅ Improved developer experience

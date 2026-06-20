@@ -51,8 +51,24 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
+    }
+  },
+  root: 'src',
   build: {
     outDir: 'dist/public', // Server code outputs to dist/, Vue outputs to dist/public/
+  },
+  server: {
+    port: 8080,
+    proxy: 'http://127.0.0.1:3001'
+  },
+  pluginOptions: {
+    serverDev: {
+      run: 'npx tsx watch --tsconfig tsconfig.server.json ./src/server/index.ts',
+      watchDir: './tsconfig.server.json'
+    }
   }
 })
 `
@@ -74,7 +90,7 @@ module.exports = defineConfig({
     
     devDependencies = {
       "typescript": "^5.3.3",
-      "ts-node-dev": "^1.2.3",
+      "tsx": "^4.7.0",
       "tsup": "^8.0.0",
       "terser": "^5.27.0",
       "@types/node": "^20.11.0"
@@ -90,9 +106,9 @@ module.exports = defineConfig({
     if (!fs.existsSync(tsConfigPath)) {
       const tsConfig = {
         compilerOptions: {
-          target: "ES2018",
+          target: "ES2020",
           module: "commonjs",
-          lib: ["ES2018"],
+          lib: ["ES2020"],
           strict: true,
           esModuleInterop: true,
           skipLibCheck: true,

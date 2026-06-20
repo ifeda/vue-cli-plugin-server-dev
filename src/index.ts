@@ -41,10 +41,6 @@ function asyncWaitUntil(predicate: () => boolean, ms = 50): Promise<void> {
 }
 
 module.exports = (api: any, options: PluginOptions) => {
-  const opts: ServerDevOptions = (options.pluginOptions && options.pluginOptions.serverDev) || {};
-  const run: string = opts.run || 'npx ts-node-dev --transpile-only ./src/server/index.ts';
-  const watchDir: string | string[] | undefined = opts.watchDir;
-
   // Detect project type (with error handling for test environments)
   let isViteProject = false;
   try {
@@ -67,6 +63,61 @@ module.exports = (api: any, options: PluginOptions) => {
     // In test environment or if package.json doesn't exist, default to Vue CLI
     isViteProject = false;
   }
+
+  let opts: ServerDevOptions = (options.pluginOptions && options.pluginOptions.serverDev) || {};
+  
+  // For Vite projects, try to read config from vite.config.js
+  if (isViteProject && (!opts.run || !opts.watchDir)) {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const viteConfigPath = api.resolve('./vite.config.js');
+      
+      if (fs.existsSync(viteConfigPath)) {
+        // Read and parse vite.config.js
+        const viteConfigContent = fs.readFileSync(viteConfigPath, 'utf8');
+        
+        // Try to extract pluginOptions.serverDev using regex
+        // This is a simple approach - for complex configs, users should use vue.config.js or environment variables
+        const serverDevMatch = viteConfigContent.match(/pluginOptions:\s*\{[\s\S]*?serverDev:\s*\{([\s\S]*?)\}/);
+        
+        if (serverDevMatch) {
+          const serverDevBlock = serverDevMatch[1];
+          
+          // Extract run option
+          const runMatch = serverDevBlock.match(/run:\s*['"]([^'"]+)['"]/);
+          if (runMatch && !opts.run) {
+            opts.run = runMatch[1];
+          }
+          
+          // Extract watchDir option
+          const watchDirMatch = serverDevBlock.match(/watchDir:\s*['"]([^'"]+)['"]/);
+          if (watchDirMatch && !opts.watchDir) {
+            opts.watchDir = watchDirMatch[1];
+          }
+          
+          // Check for array format
+          const watchDirArrayMatch = serverDevBlock.match(/watchDir:\s*\[([\s\S]*?)\]/);
+          if (watchDirArrayMatch && !opts.watchDir) {
+            const arrayContent = watchDirArrayMatch[1];
+            const items = arrayContent.match(/['"]([^'"]+)['"]/g);
+            if (items) {
+              opts.watchDir = items.map((item: string) => item.replace(/['"]/g, ''));
+            }
+          }
+          
+          if (opts.run || opts.watchDir) {
+            info('Loaded serverDev config from vite.config.js');
+          }
+        }
+      }
+    } catch (err: any) {
+      warn(`Failed to read vite.config.js: ${err.message}`);
+    }
+  }
+  
+  const run: string = opts.run || 'npx tsx watch --tsconfig tsconfig.server.json ./src/server/index.ts';
+  const watchDir: string | string[] | undefined = opts.watchDir;
 
   api.registerCommand(
     'dev:serve',
@@ -92,7 +143,8 @@ module.exports = (api: any, options: PluginOptions) => {
         }) as execa.ExecaChildProcess;
         
         serve.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
-          if (!isShuttingDown && !(serve as any).stoping) {
+          const currentServe = serve; // Capture reference to avoid null check issues
+          if (!isShuttingDown && currentServe && !(currentServe as any).stoping) {
             warn(`Server process exited with code ${code} and signal ${signal}`);
           }
         });
@@ -114,6 +166,16 @@ module.exports = (api: any, options: PluginOptions) => {
             (currentServe as any).stoping = true;
             info('Stopping development server...');
             
+            // Set up exit listener before sending kill signal
+            let exitHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | null = null;
+            exitHandler = (code: number | null, signal: NodeJS.Signals | null) => {
+              info(`Server process exited with code ${code} and signal ${signal}`);
+              currentServe.removeListener('exit', exitHandler!);
+              serve = null;
+              resolve();
+            };
+            currentServe.on('exit', exitHandler);
+            
             // Try graceful shutdown first
             try {
               if (process.platform === 'win32') {
@@ -124,12 +186,7 @@ module.exports = (api: any, options: PluginOptions) => {
                   // Fallback to tree-kill
                   kill(currentServe.pid!, 'SIGKILL', (err?: Error) => {
                     if (err) warn(err.message);
-                    serve = null;
-                    resolve();
                   });
-                }).then(() => {
-                  serve = null;
-                  resolve();
                 });
               } else {
                 // On Unix-like systems, use tree-kill
@@ -139,17 +196,13 @@ module.exports = (api: any, options: PluginOptions) => {
                     // Force kill if graceful shutdown fails
                     kill(currentServe.pid!, 'SIGKILL', (forceErr?: Error) => {
                       if (forceErr) warn(forceErr.message);
-                      serve = null;
-                      resolve();
                     });
-                  } else {
-                    serve = null;
-                    resolve();
                   }
                 });
               }
             } catch (err: any) {
               warn(`Error stopping server: ${err.message}`);
+              currentServe.removeListener('exit', exitHandler!);
               serve = null;
               resolve();
             }
@@ -245,7 +298,13 @@ module.exports = (api: any, options: PluginOptions) => {
           });
           
           watcher.on('change', debounce((filePath: string) => {
-            if (isShuttingDown || (serve && (serve as any).stoping)) {
+            if (isShuttingDown) {
+              return;
+            }
+            
+            // Check if server is currently stopping
+            const currentServe = serve;
+            if (currentServe && (currentServe as any).stoping) {
               return;
             }
             
@@ -254,6 +313,10 @@ module.exports = (api: any, options: PluginOptions) => {
             (async () => {
               try {
                 await stop();
+                info(`Waiting 5s to restarting...`)
+                // Small delay to ensure port is fully released
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
                 await start();
                 done('Success restarted development server!');
               } catch (err: any) {

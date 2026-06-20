@@ -4,10 +4,10 @@ module.exports = [
     name: 'run',
     message: `Which cmd-line will start development server?
 Make sure the cmd-line is starting your development server program!
-For TypeScript, recommended: "npx ts-node-dev --transpile-only ./src/server/index.ts"
+For TypeScript, recommended: "npx tsx watch --tsconfig tsconfig.server.json ./src/server/index.ts"
 For JavaScript, recommended: "node ./src/server/index.js"
 `,
-    default: 'npx ts-node-dev --transpile-only ./src/server/index.ts',
+    default: 'npx tsx watch --tsconfig tsconfig.server.json ./src/server/index.ts',
   },
   {
     type: 'input',
@@ -23,10 +23,14 @@ The webpack-dev-server will proxy: "http://127.0.0.1:<port>"
     message: `Where the development server code that will be watched?
 The location of your development server code, relative to the root of your project.
 Any changes will trigger restart development server.
-If you are using --respawn, then you should set false here
+
+💡 TIP: If using 'tsx watch' (recommended), set this to null or a non-server directory.
+   tsx watch has built-in file watching and provides faster hot restart.
+   Setting watchDir and any changes will cause cold restart with ~5s delay.
+
 **Important: It just needs to watch development server code, the vue code will be watched by vue-cli-service itself.
 `,
-    default: './src/server/**',
+    default: './tsconfig.server.json',
   },
   {
     type: 'confirm',

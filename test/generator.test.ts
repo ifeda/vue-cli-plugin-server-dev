@@ -23,8 +23,8 @@ describe('Generator', () => {
 
     mockOptions = {
       port: '3000',
-      run: 'npx ts-node-dev ./src/server/index.ts',
-      watchDir: './src/server/**',
+      run: 'npx tsx watch --tsconfig tsconfig.server.json ./src/server/index.ts',
+      watchDir: './tsconfig.server.json',
       installTypeScript: true
     };
 
@@ -75,7 +75,7 @@ describe('Generator', () => {
       const callArgs = mockApi.extendPackage.mock.calls[0][0];
       expect(callArgs.devDependencies).toBeDefined();
       expect(callArgs.devDependencies.typescript).toBeDefined();
-      expect(callArgs.devDependencies['ts-node-dev']).toBeDefined();
+      expect(callArgs.devDependencies.tsx).toBeDefined();
       expect(callArgs.devDependencies.tsup).toBeDefined();
     });
 
